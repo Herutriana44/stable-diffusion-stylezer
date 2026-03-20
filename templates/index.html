@@ -278,7 +278,7 @@
                     <div class="canvas-wrapper">
                         <canvas id="maskCanvas"></canvas>
                     </div>
-                    <p class="mask-hint">Gambar area yang ingin diganti dengan outfit (putih = area yang akan diubah)</p>
+                    <p class="mask-hint">Gambar area yang ingin diganti dengan outfit. Area putih = area yang akan diubah.</p>
                 </div>
                 <p class="mask-hint" id="maskHint">Upload gambar di kolom 1 terlebih dahulu</p>
             </div>
@@ -465,11 +465,10 @@
             if (!sourceImage) return;
             ctx.clearRect(0, 0, canvasWidth, canvasHeight);
             ctx.drawImage(sourceImage, 0, 0, canvasWidth, canvasHeight);
-            ctx.fillStyle = 'rgba(167, 139, 250, 0.4)';
-            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-            ctx.globalCompositeOperation = 'destination-in';
-            ctx.drawImage(maskCanvasOffscreen, 0, 0);
             ctx.globalCompositeOperation = 'source-over';
+            ctx.globalAlpha = 1;
+            ctx.drawImage(maskCanvasOffscreen, 0, 0);
+            ctx.globalAlpha = 1;
         }
 
         function setupCanvasDrawing() {
