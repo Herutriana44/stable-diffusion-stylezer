@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stable Diffusion Stylezer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0d0d0f;
+            --surface: #16161a;
+            --surface-hover: #1e1e24;
+            --border: #2a2a32;
+            --text: #e4e4e7;
+            --text-muted: #71717a;
+            --accent: #a78bfa;
+            --accent-hover: #c4b5fd;
+            --success: #34d399;
+            --error: #f87171;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+        }
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent), #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-top: 0.25rem;
+        }
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .step-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.25rem;
+            transition: border-color 0.2s;
+        }
+        .step-card:hover { border-color: var(--accent); }
+        .step-card h3 {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .upload-zone {
+            border: 2px dashed var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-height: 140px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: var(--accent);
+            background: rgba(167, 139, 250, 0.05);
+        }
+        .upload-zone.has-image { border-style: solid; }
+        .upload-zone input { display: none; }
+        .upload-zone .icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            opacity: 0.7;
+        }
+        .upload-zone .hint {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        .preview-img {
+            max-width: 100%;
+            max-height: 180px;
+            object-fit: contain;
+            border-radius: 6px;
+        }
+        .canvas-container {
+            position: relative;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem;
+            overflow: auto;
+            max-height: 400px;
+        }
+        .canvas-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+        #maskCanvas {
+            display: block;
+            cursor: crosshair;
+            border-radius: 6px;
+            max-width: 100%;
+        }
+        .mask-hint {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+        }
+        .toolbar {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+            flex-wrap: wrap;
+        }
+        .btn {
+            font-family: inherit;
+            font-size: 0.875rem;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
+        .btn-outline:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent), #8b5cf6);
+            color: white;
+        }
+        .btn-primary:hover {
+            filter: brightness(1.1);
+            transform: translateY(-1px);
+        }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .process-section {
+            text-align: center;
+            margin: 2rem 0;
+        }
+        .process-section .btn-primary {
+            padding: 0.75rem 2rem;
+            font-size: 1rem;
+        }
+        .output-section {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            min-height: 200px;
+        }
+        .output-section h3 {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+        .output-section img {
+            max-width: 100%;
+            max-height: 400px;
+            border-radius: 8px;
+        }
+        .loading {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-muted);
+        }
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .error-msg {
+            color: var(--error);
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Stable Diffusion Stylezer</h1>
+            <p class="subtitle">Ubah style/outfit pada gambar dengan masking area dan upload gambar produk</p>
+        </header>
+
+        <div class="steps">
+            <div class="step-card">
+                <h3>1. Gambar yang ingin diubah</h3>
+                <div class="upload-zone" id="zoneImage" data-type="image">
+                    <input type="file" id="inputImage" accept="image/*">
+                    <span class="icon">🖼️</span>
+                    <span class="hint">Klik atau drag & drop gambar</span>
+                    <img class="preview-img" id="previewImage" style="display:none" alt="Preview">
+                </div>
+            </div>
+
+            <div class="step-card">
+                <h3>2. Mask area yang ingin diganti</h3>
+                <div class="canvas-container" id="canvasContainer" style="display:none">
+                    <div class="toolbar">
+                        <button class="btn btn-outline" id="btnBrush">Brush</button>
+                        <button class="btn btn-outline" id="btnEraser">Eraser</button>
+                        <input type="range" id="brushSize" min="5" max="80" value="25" style="width:100px;vertical-align:middle">
+                        <span class="mask-hint" id="brushSizeLabel">Size: 25</span>
+                    </div>
+                    <div class="canvas-wrapper">
+                        <canvas id="maskCanvas"></canvas>
+                    </div>
+                    <p class="mask-hint">Gambar area yang ingin diganti dengan outfit (putih = area yang akan diubah)</p>
+                </div>
+                <p class="mask-hint" id="maskHint">Upload gambar terlebih dahulu</p>
+            </div>
+
+            <div class="step-card">
+                <h3>3. Gambar outfit/stylist</h3>
+                <div class="upload-zone" id="zoneOutfit" data-type="outfit">
+                    <input type="file" id="inputOutfit" accept="image/*">
+                    <span class="icon">👗</span>
+                    <span class="hint">Baju, hijab, celana, dll</span>
+                    <img class="preview-img" id="previewOutfit" style="display:none" alt="Preview">
+                </div>
+            </div>
+        </div>
+
+        <div class="process-section">
+            <button class="btn btn-primary" id="btnProcess" disabled>Process</button>
+        </div>
+
+        <div class="output-section">
+            <h3>Hasil</h3>
+            <div id="outputContent">
+                <p class="mask-hint">Hasil akan muncul di sini setelah proses selesai</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const zoneImage = document.getElementById('zoneImage');
+        const zoneOutfit = document.getElementById('zoneOutfit');
+        const inputImage = document.getElementById('inputImage');
+        const inputOutfit = document.getElementById('inputOutfit');
+        const previewImage = document.getElementById('previewImage');
+        const previewOutfit = document.getElementById('previewOutfit');
+        const canvasContainer = document.getElementById('canvasContainer');
+        const maskHint = document.getElementById('maskHint');
+        const maskCanvas = document.getElementById('maskCanvas');
+        const ctx = maskCanvas.getContext('2d');
+        const btnBrush = document.getElementById('btnBrush');
+        const btnEraser = document.getElementById('btnEraser');
+        const brushSize = document.getElementById('brushSize');
+        const brushSizeLabel = document.getElementById('brushSizeLabel');
+        const btnProcess = document.getElementById('btnProcess');
+        const outputContent = document.getElementById('outputContent');
+
+        let sourceImage = null;
+        let sourceImageData = null;
+        let outfitImageData = null;
+        let isDrawing = false;
+        let isEraser = false;
+        let lastX, lastY;
+
+        function setupUpload(zone, input, preview, type) {
+            zone.addEventListener('click', () => input.click());
+            zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+            zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+            zone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                zone.classList.remove('dragover');
+                if (e.dataTransfer.files.length) input.files = e.dataTransfer.files;
+                input.dispatchEvent(new Event('change'));
+            });
+            input.addEventListener('change', async () => {
+                const f = input.files[0];
+                if (!f) return;
+                const form = new FormData();
+                form.append('file', f);
+                const endpoint = type === 'image' ? '/api/upload/image' : '/api/upload/outfit';
+                try {
+                    const r = await fetch(endpoint, { method: 'POST', body: form });
+                    const data = await r.json();
+                    if (data.success) {
+                        preview.src = data.image;
+                        preview.style.display = 'block';
+                        zone.querySelector('.icon').style.display = 'none';
+                        zone.querySelector('.hint').style.display = 'none';
+                        zone.classList.add('has-image');
+                        if (type === 'image') {
+                            sourceImageData = data.image;
+                            await loadImageForMask(data.image);
+                        } else {
+                            outfitImageData = data.image;
+                        }
+                        updateProcessState();
+                    } else {
+                        alert(data.error || 'Upload gagal');
+                    }
+                } catch (e) {
+                    alert('Error: ' + e.message);
+                }
+            });
+        }
+        setupUpload(zoneImage, inputImage, previewImage, 'image');
+        setupUpload(zoneOutfit, inputOutfit, previewOutfit, 'outfit');
+
+        let maskCanvasOffscreen = null;
+        let maskCtxOffscreen = null;
+        let canvasWidth = 0, canvasHeight = 0;
+
+        async function loadImageForMask(dataUrl) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => {
+                    sourceImage = img;
+                    const maxW = 512, maxH = 512;
+                    let w = img.width, h = img.height;
+                    if (w > maxW || h > maxH) {
+                        const r = Math.min(maxW / w, maxH / h);
+                        w = Math.round(w * r);
+                        h = Math.round(h * r);
+                    }
+                    canvasWidth = w;
+                    canvasHeight = h;
+                    maskCanvas.width = w;
+                    maskCanvas.height = h;
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.drawImage(img, 0, 0, w, h);
+                    maskCanvasOffscreen = document.createElement('canvas');
+                    maskCanvasOffscreen.width = w;
+                    maskCanvasOffscreen.height = h;
+                    maskCtxOffscreen = maskCanvasOffscreen.getContext('2d');
+                    maskCtxOffscreen.fillStyle = 'black';
+                    maskCtxOffscreen.fillRect(0, 0, w, h);
+                    canvasContainer.style.display = 'block';
+                    maskHint.style.display = 'none';
+                    setupCanvasDrawing();
+                    resolve();
+                };
+                img.src = dataUrl;
+            });
+        }
+
+        function getCanvasCoords(e) {
+            const r = maskCanvas.getBoundingClientRect();
+            const scaleX = maskCanvas.width / r.width;
+            const scaleY = maskCanvas.height / r.height;
+            return {
+                x: (e.clientX - r.left) * scaleX,
+                y: (e.clientY - r.top) * scaleY
+            };
+        }
+
+        function redrawDisplay() {
+            ctx.drawImage(sourceImage, 0, 0, canvasWidth, canvasHeight);
+            ctx.fillStyle = 'rgba(167, 139, 250, 0.35)';
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+            ctx.globalCompositeOperation = 'destination-in';
+            ctx.drawImage(maskCanvasOffscreen, 0, 0);
+            ctx.globalCompositeOperation = 'source-over';
+        }
+
+        function setupCanvasDrawing() {
+            brushSize.oninput = () => { brushSizeLabel.textContent = 'Size: ' + brushSize.value; };
+            btnBrush.onclick = () => { isEraser = false; btnBrush.classList.add('btn-primary'); btnEraser.classList.remove('btn-primary'); btnEraser.classList.add('btn-outline'); btnBrush.classList.remove('btn-outline'); };
+            btnEraser.onclick = () => { isEraser = true; btnEraser.classList.add('btn-primary'); btnBrush.classList.remove('btn-primary'); btnBrush.classList.add('btn-outline'); btnEraser.classList.remove('btn-outline'); };
+            btnBrush.classList.add('btn-primary');
+            btnEraser.classList.add('btn-outline');
+
+            const drawAt = (x, y) => {
+                const size = brushSize.value / 2;
+                maskCtxOffscreen.beginPath();
+                maskCtxOffscreen.arc(x, y, size, 0, Math.PI * 2);
+                if (isEraser) {
+                    maskCtxOffscreen.fillStyle = 'black';
+                } else {
+                    maskCtxOffscreen.fillStyle = 'white';
+                }
+                maskCtxOffscreen.fill();
+                redrawDisplay();
+            };
+
+            maskCanvas.onmousedown = (e) => {
+                isDrawing = true;
+                const { x, y } = getCanvasCoords(e);
+                lastX = x; lastY = y;
+                drawAt(x, y);
+            };
+            maskCanvas.onmousemove = (e) => {
+                if (!isDrawing) return;
+                const { x, y } = getCanvasCoords(e);
+                drawAt(x, y);
+                lastX = x; lastY = y;
+            };
+            maskCanvas.onmouseup = () => { isDrawing = false; };
+            maskCanvas.onmouseleave = () => { isDrawing = false; };
+        }
+
+        function getMaskAsWhiteOnBlack() {
+            return maskCanvasOffscreen.toDataURL('image/png');
+        }
+
+        function updateProcessState() {
+            btnProcess.disabled = !(sourceImageData && outfitImageData && sourceImage);
+        }
+
+        btnProcess.addEventListener('click', async () => {
+            if (!sourceImageData || !outfitImageData) return;
+            btnProcess.disabled = true;
+            outputContent.innerHTML = '<div class="loading"><div class="spinner"></div>Memproses... (bisa 1-2 menit)</div>';
+            const maskData = getMaskAsWhiteOnBlack();
+            try {
+                const r = await fetch('/api/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image: sourceImageData,
+                        outfit: outfitImageData,
+                        mask: maskData
+                    })
+                });
+                const data = await r.json();
+                if (data.success) {
+                    outputContent.innerHTML = '<img src="' + data.image + '" alt="Result">';
+                } else {
+                    outputContent.innerHTML = '<p class="error-msg">' + (data.error || 'Proses gagal') + '</p>';
+                }
+            } catch (e) {
+                outputContent.innerHTML = '<p class="error-msg">Error: ' + e.message + '</p>';
+            }
+            btnProcess.disabled = false;
+        });
+    </script>
+</body>
+</html>
