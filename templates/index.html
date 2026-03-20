@@ -52,9 +52,12 @@
         }
         .steps {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: 1fr 1fr 1fr;
             gap: 1.5rem;
             margin-bottom: 2rem;
+        }
+        @media (max-width: 900px) {
+            .steps { grid-template-columns: 1fr; }
         }
         .step-card {
             background: var(--surface);
@@ -108,22 +111,26 @@
         }
         .canvas-container {
             position: relative;
-            background: var(--surface);
+            background: #1a1a1a;
             border: 1px solid var(--border);
             border-radius: 12px;
             padding: 1rem;
             overflow: auto;
-            max-height: 400px;
+            min-height: 200px;
         }
         .canvas-wrapper {
             position: relative;
             display: inline-block;
+            line-height: 0;
         }
         #maskCanvas {
             display: block;
             cursor: crosshair;
             border-radius: 6px;
-            max-width: 100%;
+            touch-action: none;
+            user-select: none;
+            min-width: 200px;
+            min-height: 150px;
         }
         .mask-hint {
             font-size: 0.8rem;
@@ -214,6 +221,27 @@
             font-size: 0.9rem;
             margin-top: 0.5rem;
         }
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: var(--border);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+            display: none;
+        }
+        .progress-bar.visible { display: block; }
+        .progress-bar .fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), #8b5cf6);
+            width: 0%;
+            transition: width 0.2s;
+        }
+        .progress-text {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
     </style>
 </head>
 <body>
@@ -231,6 +259,10 @@
                     <span class="icon">🖼️</span>
                     <span class="hint">Klik atau drag & drop gambar</span>
                     <img class="preview-img" id="previewImage" style="display:none" alt="Preview">
+                    <div class="progress-bar" id="progressImage">
+                        <div class="fill"></div>
+                    </div>
+                    <span class="progress-text" id="progressImageText"></span>
                 </div>
             </div>
 
@@ -248,7 +280,7 @@
                     </div>
                     <p class="mask-hint">Gambar area yang ingin diganti dengan outfit (putih = area yang akan diubah)</p>
                 </div>
-                <p class="mask-hint" id="maskHint">Upload gambar terlebih dahulu</p>
+                <p class="mask-hint" id="maskHint">Upload gambar di kolom 1 terlebih dahulu</p>
             </div>
 
             <div class="step-card">
@@ -258,6 +290,10 @@
                     <span class="icon">👗</span>
                     <span class="hint">Baju, hijab, celana, dll</span>
                     <img class="preview-img" id="previewOutfit" style="display:none" alt="Preview">
+                    <div class="progress-bar" id="progressOutfit">
+                        <div class="fill"></div>
+                    </div>
+                    <span class="progress-text" id="progressOutfitText"></span>
                 </div>
             </div>
         </div>
@@ -300,7 +336,11 @@
         let lastX, lastY;
 
         function setupUpload(zone, input, preview, type) {
-            zone.addEventListener('click', () => input.click());
+            const progressBar = document.getElementById('progress' + (type === 'image' ? 'Image' : 'Outfit'));
+            const progressFill = progressBar?.querySelector('.fill');
+            const progressText = document.getElementById('progress' + (type === 'image' ? 'Image' : 'Outfit') + 'Text');
+
+            zone.addEventListener('click', (e) => { if (!e.target.closest('input')) input.click(); });
             zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
             zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
             zone.addEventListener('drop', (e) => {
@@ -309,15 +349,39 @@
                 if (e.dataTransfer.files.length) input.files = e.dataTransfer.files;
                 input.dispatchEvent(new Event('change'));
             });
-            input.addEventListener('change', async () => {
+            input.addEventListener('change', () => {
                 const f = input.files[0];
                 if (!f) return;
                 const form = new FormData();
                 form.append('file', f);
                 const endpoint = type === 'image' ? '/api/upload/image' : '/api/upload/outfit';
-                try {
-                    const r = await fetch(endpoint, { method: 'POST', body: form });
-                    const data = await r.json();
+
+                progressBar?.classList.add('visible');
+                if (progressFill) progressFill.style.width = '0%';
+                if (progressText) progressText.textContent = '0%';
+
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', endpoint);
+                xhr.responseType = 'json';
+
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable) {
+                        const pct = Math.round((e.loaded / e.total) * 100);
+                        if (progressFill) progressFill.style.width = pct + '%';
+                        if (progressText) progressText.textContent = pct + '%';
+                    }
+                });
+
+                xhr.send(form);
+
+                xhr.onload = async () => {
+                    progressBar?.classList.remove('visible');
+                    if (progressFill) progressFill.style.width = '100%';
+                    if (progressText) progressText.textContent = '';
+                    let data = {};
+                    try {
+                        data = xhr.responseType === 'json' ? (xhr.response || {}) : JSON.parse(xhr.responseText || '{}');
+                    } catch (_) {}
                     if (data.success) {
                         preview.src = data.image;
                         preview.style.display = 'block';
@@ -334,9 +398,11 @@
                     } else {
                         alert(data.error || 'Upload gagal');
                     }
-                } catch (e) {
-                    alert('Error: ' + e.message);
-                }
+                };
+                xhr.onerror = () => {
+                    progressBar?.classList.remove('visible');
+                    alert('Upload gagal');
+                };
             });
         }
         setupUpload(zoneImage, inputImage, previewImage, 'image');
@@ -347,9 +413,8 @@
         let canvasWidth = 0, canvasHeight = 0;
 
         async function loadImageForMask(dataUrl) {
-            return new Promise((resolve) => {
+            return new Promise((resolve, reject) => {
                 const img = new Image();
-                img.crossOrigin = 'anonymous';
                 img.onload = () => {
                     sourceImage = img;
                     const maxW = 512, maxH = 512;
@@ -361,38 +426,46 @@
                     }
                     canvasWidth = w;
                     canvasHeight = h;
+
                     maskCanvas.width = w;
                     maskCanvas.height = h;
-                    ctx.imageSmoothingEnabled = true;
-                    ctx.drawImage(img, 0, 0, w, h);
+
                     maskCanvasOffscreen = document.createElement('canvas');
                     maskCanvasOffscreen.width = w;
                     maskCanvasOffscreen.height = h;
                     maskCtxOffscreen = maskCanvasOffscreen.getContext('2d');
-                    maskCtxOffscreen.fillStyle = 'black';
-                    maskCtxOffscreen.fillRect(0, 0, w, h);
+                    maskCtxOffscreen.clearRect(0, 0, w, h);
+
                     canvasContainer.style.display = 'block';
                     maskHint.style.display = 'none';
+
+                    redrawDisplay();
                     setupCanvasDrawing();
                     resolve();
                 };
+                img.onerror = () => reject(new Error('Gagal memuat gambar'));
                 img.src = dataUrl;
             });
         }
 
         function getCanvasCoords(e) {
-            const r = maskCanvas.getBoundingClientRect();
-            const scaleX = maskCanvas.width / r.width;
-            const scaleY = maskCanvas.height / r.height;
+            const rect = maskCanvas.getBoundingClientRect();
+            const clientX = e.clientX ?? e.touches?.[0]?.clientX ?? e.changedTouches?.[0]?.clientX;
+            const clientY = e.clientY ?? e.touches?.[0]?.clientY ?? e.changedTouches?.[0]?.clientY;
+            if (clientX == null || clientY == null) return null;
+            const scaleX = maskCanvas.width / rect.width;
+            const scaleY = maskCanvas.height / rect.height;
             return {
-                x: (e.clientX - r.left) * scaleX,
-                y: (e.clientY - r.top) * scaleY
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
             };
         }
 
         function redrawDisplay() {
+            if (!sourceImage) return;
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
             ctx.drawImage(sourceImage, 0, 0, canvasWidth, canvasHeight);
-            ctx.fillStyle = 'rgba(167, 139, 250, 0.35)';
+            ctx.fillStyle = 'rgba(167, 139, 250, 0.4)';
             ctx.fillRect(0, 0, canvasWidth, canvasHeight);
             ctx.globalCompositeOperation = 'destination-in';
             ctx.drawImage(maskCanvasOffscreen, 0, 0);
@@ -406,37 +479,60 @@
             btnBrush.classList.add('btn-primary');
             btnEraser.classList.add('btn-outline');
 
+            const size = () => brushSize.value / 2;
             const drawAt = (x, y) => {
-                const size = brushSize.value / 2;
+                if (x == null || y == null) return;
+                const s = size();
                 maskCtxOffscreen.beginPath();
-                maskCtxOffscreen.arc(x, y, size, 0, Math.PI * 2);
+                maskCtxOffscreen.arc(x, y, s, 0, Math.PI * 2);
                 if (isEraser) {
-                    maskCtxOffscreen.fillStyle = 'black';
+                    maskCtxOffscreen.globalCompositeOperation = 'destination-out';
+                    maskCtxOffscreen.fillStyle = 'white';
                 } else {
+                    maskCtxOffscreen.globalCompositeOperation = 'source-over';
                     maskCtxOffscreen.fillStyle = 'white';
                 }
                 maskCtxOffscreen.fill();
+                maskCtxOffscreen.globalCompositeOperation = 'source-over';
                 redrawDisplay();
             };
 
-            maskCanvas.onmousedown = (e) => {
-                isDrawing = true;
-                const { x, y } = getCanvasCoords(e);
-                lastX = x; lastY = y;
-                drawAt(x, y);
+            const handleStart = (e) => {
+                e.preventDefault();
+                const co = getCanvasCoords(e);
+                if (co) { isDrawing = true; drawAt(co.x, co.y); }
             };
-            maskCanvas.onmousemove = (e) => {
+            const handleMove = (e) => {
+                e.preventDefault();
                 if (!isDrawing) return;
-                const { x, y } = getCanvasCoords(e);
-                drawAt(x, y);
-                lastX = x; lastY = y;
+                const co = getCanvasCoords(e);
+                if (co) drawAt(co.x, co.y);
             };
-            maskCanvas.onmouseup = () => { isDrawing = false; };
-            maskCanvas.onmouseleave = () => { isDrawing = false; };
+            const handleEnd = (e) => {
+                e.preventDefault();
+                isDrawing = false;
+            };
+
+            maskCanvas.onmousedown = handleStart;
+            maskCanvas.onmousemove = handleMove;
+            maskCanvas.onmouseup = handleEnd;
+            maskCanvas.onmouseleave = handleEnd;
+            maskCanvas.ontouchstart = handleStart;
+            maskCanvas.ontouchmove = handleMove;
+            maskCanvas.ontouchend = handleEnd;
         }
 
         function getMaskAsWhiteOnBlack() {
-            return maskCanvasOffscreen.toDataURL('image/png');
+            const w = maskCanvasOffscreen.width, h = maskCanvasOffscreen.height;
+            const out = document.createElement('canvas');
+            out.width = w;
+            out.height = h;
+            const octx = out.getContext('2d');
+            octx.fillStyle = 'black';
+            octx.fillRect(0, 0, w, h);
+            octx.globalCompositeOperation = 'source-over';
+            octx.drawImage(maskCanvasOffscreen, 0, 0);
+            return out.toDataURL('image/png');
         }
 
         function updateProcessState() {
